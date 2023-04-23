@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Multiuser Drawing Board</title>
+  <style>
+    #canvas {
+      border: 1px solid black;
+      margin: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div>
+    <label for="username">Username:</label>
+    <input type="text" id="username">
+    <button id="join">Join</button>
+  </div>
+  <canvas id="canvas" width="500" height="500"></canvas>
+  <ul id="userList"></ul>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const socket = io();
+
+    let isDrawing = false;
+    let currentX = 0;
+    let currentY = 0;
+
+    // Listen for 'draw' event and draw on canvas
+    socket.on('draw', data => {
+      const { x, y, type, color } = data;
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      if (type === 'drag') {
+        ctx.moveTo(currentX, currentY);
+        currentX = x;
+        currentY = y;
+        ctx.lineTo(currentX, currentY);
+      } else {
+        ctx.moveTo(x - 1, y);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+
+    // Listen for 'userConnected' event and add new user to list
+    socket.on('userConnected', data => {
+      const { id, username } = data;
+      const user = document.createElement('li');
+      user.innerText = username;
+      user.id = id;
+      document.getElementById('userList').appendChild(user);
+    });
+
+    // Listen for 'userDisconnected' event and remove user from list
+    socket.on('userDisconnected', data => {
+      const { id, username } = data;
+      const user = document.getElementById(id);
+      user.parentNode.removeChild(user);
+    });
+
+    // Add user to list and emit 'addUser' event to server
+    document.getElementById('join').addEventListener('click', () => {
+      const username = document.getElementById('username').value;
+      const user = document.createElement('li');
+      user.innerText = username;
+      document.getElementById('userList').appendChild(user);
+      socket.emit('addUser', username);
+    });
+
+    // Start drawing when mouse is pressed down
+    canvas.addEventListener('mousedown', e => {
+      isDrawing = true;
+      currentX = e.offsetX;
+      currentY = e.offsetY;
+    });
+
+    // Draw on canvas while mouse is moved and emitting 'draw' event to server
+    canvas.addEventListener('mousemove', e => {
+  if (isDrawing) {
+    socket.emit('draw', { x: e.offsetX, y: e.offsetY, type: 'drag', color: getColor() });
+    const { offsetX, offsetY } = e;
+const { type, color } = { type: 'drag', color: getColor() };
+ctx.strokeStyle = color;
+if (type === 'drag') {
+  ctx.lineTo(offsetX, offsetY);
+} else {
+  ctx.beginPath();
+  ctx.moveTo(offsetX - 1, offsetY);
+}
+ctx.stroke();
+
+currentX = offsetX;
+currentY = offsetY;
+
+  }
+});
+
+
+    // Stop drawing when mouse is released and emitting 'draw' event to server
+    canvas.addEventListener('mouseup', e => {
+      isDrawing = false;
+      socket.emit('draw', { x: e.offsetX, y: e.offsetY, type: 'mouseup', color: getColor() });
+    });
+
+    // Get mouse position
+    function getMousePosition(canvas, event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+    // Generate random color
+    function getColor() {
+      const letters = '0123456789ABCDEF';
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+  </script>
